@@ -19,7 +19,7 @@ namespace GameWarriors.StorageDomain.Core
         private readonly IStorageConfig _storageConfig;
         private readonly Dictionary<Type, IStorageItem> _fileTable;
         private Dictionary<Type, StorageDatabaseItem> _databaseTable;
-        //private List<Task> _loadDataTaskList;
+        private Dictionary<string, Task> _loadingTable;
 
         private bool _isDataChange;
         private string _fileRoot;
@@ -45,15 +45,18 @@ namespace GameWarriors.StorageDomain.Core
             storageEvent.SetStorageUpdate(StorageUpdate);
             _storageEvent = storageEvent;
             _fileTable = new Dictionary<Type, IStorageItem>();
-            //_loadDataTaskList = new List<Task>();
+            _loadingTable = new Dictionary<string, Task>();
+            _loadingTable.Add(DATABASE_FILE_NAME, Task.Run(ReadDatabaseFiles));
         }
 
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public Task WaitForLoading()
+        public async Task WaitForLoading()
         {
-            return Task.Run(ReadDatabaseFiles);
+            await Task.WhenAll(_loadingTable.Values);
+            _loadingTable.Clear();
+            _loadingTable = null;
         }
 
         public void DeleteDefaultDirectory(string defaultPerfix)
@@ -72,7 +75,7 @@ namespace GameWarriors.StorageDomain.Core
         public async Task ReloadFileDirectoy(Action onDone)
         {
             await Task.Run(ReadDatabaseFiles);
-            onDone?.Invoke();            
+            onDone?.Invoke();
         }
 
         public bool ChangeFileDirectionPrefix(bool isDeleteOldFiles)
@@ -152,34 +155,48 @@ namespace GameWarriors.StorageDomain.Core
 
         }
 
-        public Task<T> RegisterLoadingModel<T>(string dataName, bool isEncrypt) where T : IStorageItem, new()
+        public Task<T> LoadingModelAsync<T>(string dataName, bool isEncrypt) where T : IStorageItem, new()
         {
             string path = _fileRoot + dataName;
-            Task<T> task;
-            if (isEncrypt)
+            if (_loadingTable.TryGetValue(dataName, out var oldTask))
             {
-                task = _fileHandler.LoadEncryptedFileAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<T>);
+                return oldTask as Task<T>;
             }
             else
-                task = _fileHandler.LoadFileAsync<T>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<T>);
+            {
+                Task<T> task;
+                if (isEncrypt)
+                {
+                    task = _fileHandler.LoadEncryptedFileAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<T>);
+                }
+                else
+                    task = _fileHandler.LoadFileAsync<T>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<T>);
 
-            //_loadDataTaskList.Add(task);
-            return task;
+                _loadingTable.Add(dataName, task);
+                return task;
+            }
         }
 
-        public Task<U> RegisterLoadingDefaultModel<T, U>(string dataName, bool isEncrypt) where T : IStorageDataItem, new() where U : IDefaultDataModel, new()
+        public Task<U> LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt) where T : IStorageDataItem, new() where U : IDefaultDataModel, new()
         {
             string path = _fileRoot + dataName;
-            Task<U> task;
-            if (isEncrypt)
+            if (_loadingTable.TryGetValue(dataName, out var oldTask))
             {
-                task = _fileHandler.LoadEncryptedFileAsync<U>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<U>);
+                return oldTask as Task<U>;
             }
             else
-                task = _fileHandler.LoadFileAsync<U>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<U>);
+            {
+                Task<U> task;
+                if (isEncrypt)
+                {
+                    task = _fileHandler.LoadEncryptedFileAsync<U>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<U>);
+                }
+                else
+                    task = _fileHandler.LoadFileAsync<U>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<U>);
 
-            //_loadDataTaskList.Add(task);
-            return task;
+                _loadingTable.Add(dataName, task);
+                return task;
+            }
         }
 
         private void StorageUpdate(float deltaTime)

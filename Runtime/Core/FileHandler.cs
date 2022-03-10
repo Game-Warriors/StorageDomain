@@ -12,7 +12,10 @@ namespace GameWarriors.StorageDomain.Core
         private readonly IStorageJsonHandler _jsonHandler;
         private readonly IStorageEventHandler _storageEventHandler;
 
-        public FileHandler(IStorageJsonHandler jsonHandler,IStorageEventHandler storageEvent)
+#if UNITY_2018_4_OR_NEWER
+        [UnityEngine.Scripting.Preserve]
+#endif
+        public FileHandler(IStorageJsonHandler jsonHandler, IStorageEventHandler storageEvent)
         {
             _jsonHandler = jsonHandler;
             _storageEventHandler = storageEvent;
