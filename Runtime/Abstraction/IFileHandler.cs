@@ -6,6 +6,7 @@ namespace GameWarriors.StorageDomain.Abstraction
 {
     public interface IFileHandler
     {
+        event Action<string> LogErrorListener;
         string LoadDataStringFile(string path, byte[] key);
         Task<string> LoadDataStringFileAsync(string path, byte[] key);
         bool SaveDataStringFile(string data, string path, byte[] key);

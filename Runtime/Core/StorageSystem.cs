@@ -7,14 +7,14 @@ using System.Threading.Tasks;
 
 namespace GameWarriors.StorageDomain.Core
 {
-    public class StorageSystem : IStorage
+    public class StorageSystem : IStorage, IStorageOperations
     {
         private enum EDatabaseType { None, Int, Float, String, Bool }
+
         private const string TYPE_INDICATOR_KEY = "@DataType!";
         private const string DATABASE_FILE_NAME = "DatabaseFile.bin";
         private const string DATABASE_DIRECTORY_NAME = "{0}_Storage";
 
-        private readonly IStorageEventHandler _storageEvent;
         private readonly IFileHandler _fileHandler;
         private readonly IStorageConfig _storageConfig;
         private readonly Dictionary<Type, IStorageItem> _fileTable;
@@ -27,13 +27,13 @@ namespace GameWarriors.StorageDomain.Core
         private string _databaseFilePath;
         private float _timeTmp;
 
+        public event Action<string> LogErrorListener;
         public string FileRoot => _fileRoot;
-        public byte[] Key => _storageConfig.Key;
 
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public StorageSystem(IFileHandler fileHandler, IStorageConfig storageConfig, IStorageEventHandler storageEvent)
+        public StorageSystem(IFileHandler fileHandler, IStorageConfig storageConfig)
         {
             _fileHandler = fileHandler;
             _storageConfig = storageConfig;
@@ -41,9 +41,6 @@ namespace GameWarriors.StorageDomain.Core
             GenerateDatabaseFilePath();
             if (!Directory.Exists(_fileRoot))
                 Directory.CreateDirectory(_fileRoot);
-            storageEvent.SetForceSaveEvent(ForceSaveing);
-            storageEvent.SetStorageUpdate(StorageUpdate);
-            _storageEvent = storageEvent;
             _fileTable = new Dictionary<Type, IStorageItem>();
             _loadingTable = new Dictionary<string, Task>();
             _loadingTable.Add(DATABASE_FILE_NAME, Task.Run(ReadDatabaseFiles));
@@ -59,62 +56,7 @@ namespace GameWarriors.StorageDomain.Core
             _loadingTable = null;
         }
 
-        public void DeleteDefaultDirectory(string defaultPerfix)
-        {
-            string fileRoot;
-#if !UNITY_EDITOR
-            fileRoot = _storageConfig.StorageDataPath + "/" + string.Format(DATABASE_DIRECTORY_NAME, defaultPerfix) + "/";
-#else
-            fileRoot = string.Format(DATABASE_DIRECTORY_NAME, defaultPerfix) + "/";
-#endif
-
-            if (Directory.Exists(fileRoot))
-                Directory.Delete(fileRoot, true);
-        }
-
-        public async Task ReloadFileDirectoy(Action onDone)
-        {
-            await Task.Run(ReadDatabaseFiles);
-            onDone?.Invoke();
-        }
-
-        public bool ChangeFileDirectionPrefix(bool isDeleteOldFiles)
-        {
-            if (string.Compare(_currentDirectoryPrefix, _storageConfig.DirectoryPrefix) == 0)
-                return false;
-
-            _currentDirectoryPrefix = _storageConfig.DirectoryPrefix;
-            string oldFileRoot = _fileRoot;
-            GenerateDatabaseFilePath();
-            bool isNewPathExist = Directory.Exists(_fileRoot);
-            if (isNewPathExist)
-            {
-                ReloadStorageItemFiles();
-                ReadDatabaseFiles();
-                return true;
-            }
-            if (isDeleteOldFiles)
-                Directory.Delete(oldFileRoot, true);
-            if (!Directory.Exists(_fileRoot))
-                Directory.CreateDirectory(_fileRoot);
-            ForceSaveing();
-            return false;
-        }
-
-        private void ForceSaveing()
-        {
-            try
-            {
-                WriteOnFile();
-                SaveStorageItemFiles();
-            }
-            catch (Exception E)
-            {
-                _storageEvent.LogErrorEvent(E.ToString());
-            }
-        }
-
-        public T1 GetValue<T1>(string key, T1 defualtValue = default) where T1 : IConvertible
+        T1 IStorage.GetValue<T1>(string key, T1 defualtValue)
         {
             T1 data = default;
             StorageDatabaseItem dataTable = GetValueTable(data);
@@ -130,7 +72,7 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-        public void SetValue<T1>(string key, T1 data) where T1 : IConvertible
+        void IStorage.SetValue<T1>(string key, T1 data)
         {
             var dataTable = GetValueTable(data);
             if (dataTable.ContainsKey(key))
@@ -144,7 +86,7 @@ namespace GameWarriors.StorageDomain.Core
             _isDataChange = true;
         }
 
-        public void DeleteValue<T1>(string key)
+        void IStorage.DeleteValue<T1>(string key)
         {
             T1 data = default;
             StorageDatabaseItem dataTable = GetValueTable(data);
@@ -155,7 +97,7 @@ namespace GameWarriors.StorageDomain.Core
 
         }
 
-        public Task<T> LoadingModelAsync<T>(string dataName, bool isEncrypt) where T : IStorageItem, new()
+        Task<T> IStorage.LoadingModelAsync<T>(string dataName, bool isEncrypt)
         {
             string path = _fileRoot + dataName;
             if (_loadingTable.TryGetValue(dataName, out var oldTask))
@@ -177,7 +119,7 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-        public Task<U> LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt) where T : IStorageDataItem, new() where U : IDefaultDataModel, new()
+        Task<U> IStorage.LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt)
         {
             string path = _fileRoot + dataName;
             if (_loadingTable.TryGetValue(dataName, out var oldTask))
@@ -199,7 +141,7 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-        private void StorageUpdate(float deltaTime)
+        void IStorageOperations.StorageUpdate(float deltaTime)
         {
             _timeTmp += deltaTime;
             if (_timeTmp > _storageConfig.SaveingInterval)
@@ -228,12 +170,66 @@ namespace GameWarriors.StorageDomain.Core
                 }
                 catch (Exception E)
                 {
-                    _storageEvent.LogErrorEvent(E.ToString());
+                    LogError(E.ToString());
                 }
                 _timeTmp = 0;
             }
         }
 
+        async Task IStorageOperations.ReloadFileDirectoy(Action onDone)
+        {
+            await Task.Run(ReadDatabaseFiles);
+            onDone?.Invoke();
+        }
+
+        void IStorageOperations.DeleteDefaultDirectory(string defaultPerfix)
+        {
+            string fileRoot;
+#if !UNITY_EDITOR
+            fileRoot = _storageConfig.StorageDataPath + "/" + string.Format(DATABASE_DIRECTORY_NAME, defaultPerfix) + "/";
+#else
+            fileRoot = string.Format(DATABASE_DIRECTORY_NAME, defaultPerfix) + "/";
+#endif
+
+            if (Directory.Exists(fileRoot))
+                Directory.Delete(fileRoot, true);
+        }
+
+        bool IStorageOperations.ChangeFileDirectionPrefix(bool isDeleteOldFiles)
+        {
+            if (string.Compare(_currentDirectoryPrefix, _storageConfig.DirectoryPrefix) == 0)
+                return false;
+
+            _currentDirectoryPrefix = _storageConfig.DirectoryPrefix;
+            string oldFileRoot = _fileRoot;
+            GenerateDatabaseFilePath();
+            bool isNewPathExist = Directory.Exists(_fileRoot);
+            if (isNewPathExist)
+            {
+                ReloadStorageItemFiles();
+                ReadDatabaseFiles();
+                return true;
+            }
+            if (isDeleteOldFiles)
+                Directory.Delete(oldFileRoot, true);
+            if (!Directory.Exists(_fileRoot))
+                Directory.CreateDirectory(_fileRoot);
+            ForceSave();
+            return false;
+        }
+
+        public void ForceSave()
+        {
+            try
+            {
+                WriteOnFile();
+                SaveStorageItemFiles();
+            }
+            catch (Exception E)
+            {
+                LogError(E.ToString());
+            }
+        }
         private StorageDatabaseItem GetValueTable<U>(U data)
         {
             Type uType = typeof(U);
@@ -366,7 +362,7 @@ namespace GameWarriors.StorageDomain.Core
             }
             catch (Exception E)
             {
-                _storageEvent.LogErrorEvent(E.ToString());
+                LogError(E.ToString());
             }
         }
 
@@ -442,5 +438,10 @@ namespace GameWarriors.StorageDomain.Core
         //        yield return item;
         //    }         
         //}
+
+        private void LogError(string message)
+        {
+            LogErrorListener?.Invoke(message);
+        }
     }
 }

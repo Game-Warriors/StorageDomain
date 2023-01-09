@@ -10,15 +10,14 @@ namespace GameWarriors.StorageDomain.Core
     public class FileHandler : IFileHandler
     {
         private readonly IStorageJsonHandler _jsonHandler;
-        private readonly IStorageEventHandler _storageEventHandler;
+        public event Action<string> LogErrorListener;
 
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public FileHandler(IStorageJsonHandler jsonHandler, IStorageEventHandler storageEvent)
+        public FileHandler(IStorageJsonHandler jsonHandler)
         {
             _jsonHandler = jsonHandler;
-            _storageEventHandler = storageEvent;
         }
 
         //public (bool, T) LoadFromRegistry<T>(string key, byte[] hashKey)
@@ -93,32 +92,32 @@ namespace GameWarriors.StorageDomain.Core
                 return (false, default);
             if (!File.Exists(path))
                 return (false, default);
-            using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
+            BinaryReader reader = null;
+            try
             {
-                try
+                reader = new BinaryReader(File.Open(path, FileMode.Open));
+                int hashLength = reader.ReadInt32();
+                byte[] fileHash = new byte[hashLength];
+                int readResult = reader.Read(fileHash, 0, hashLength);
+                int stringLength = reader.ReadInt32();
+                string tmp = reader.ReadString();
+                byte[] dataHash = HashInput(tmp, key);
+                reader?.Dispose();
+                reader = null;
+                if (IsSameBytes(fileHash, dataHash))
                 {
-                    int hashLength = reader.ReadInt32();
-                    byte[] fileHash = new byte[hashLength];
-                    int readResult = reader.Read(fileHash, 0, hashLength);
-                    int stringLength = reader.ReadInt32();
-                    string tmp = reader.ReadString();
-                    byte[] dataHash = HashInput(tmp, key);
-
-                    if (IsSameBytes(fileHash, dataHash))
-                    {
-                        var data = _jsonHandler.FromJson(tmp, dataType);
-                        return (true, data);
-                    }
-                    else
-                        return (false, default);
-
+                    var data = _jsonHandler.FromJson(tmp, dataType);
+                    return (true, data);
                 }
-                catch (Exception E)
-                {
-                    _storageEventHandler.LogErrorEvent($"file:{path} , " + E.ToString());
+                else
                     return (false, default);
-                }
             }
+            catch (Exception E)
+            {
+                LogError($"file:{path} , " + E.ToString());
+                reader?.Dispose();
+            }
+            return (false, default);
         }
 
         public (bool, T) LoadFile<T>(string path, byte[] key)
@@ -127,32 +126,33 @@ namespace GameWarriors.StorageDomain.Core
                 return (false, default);
             if (!File.Exists(path))
                 return (false, default);
-            using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
+            BinaryReader reader = null;
+
+            try
             {
-                try
+                reader = new BinaryReader(File.Open(path, FileMode.Open));
+                int hashLength = reader.ReadInt32();
+                byte[] fileHash = new byte[hashLength];
+                int readResult = reader.Read(fileHash, 0, hashLength);
+                int stringLength = reader.ReadInt32();
+                string tmp = reader.ReadString();
+                byte[] dataHash = HashInput(tmp, key);
+                reader?.Dispose();
+                reader = null;
+                if (IsSameBytes(fileHash, dataHash))
                 {
-                    int hashLength = reader.ReadInt32();
-                    byte[] fileHash = new byte[hashLength];
-                    int readResult = reader.Read(fileHash, 0, hashLength);
-                    int stringLength = reader.ReadInt32();
-                    string tmp = reader.ReadString();
-                    byte[] dataHash = HashInput(tmp, key);
-
-                    if (IsSameBytes(fileHash, dataHash))
-                    {
-                        var data = _jsonHandler.FromJson<T>(tmp);
-                        return (true, data);
-                    }
-                    else
-                        return (false, default);
-
+                    var data = _jsonHandler.FromJson<T>(tmp);
+                    return (true, data);
                 }
-                catch (Exception E)
-                {
-                    _storageEventHandler.LogErrorEvent(E.ToString());
+                else
                     return (false, default);
-                }
             }
+            catch (Exception E)
+            {
+                LogError(E.ToString());
+                reader?.Dispose();
+            }
+            return (false, default);
         }
 
         public string LoadDataStringFile(string path, byte[] key)
@@ -161,12 +161,13 @@ namespace GameWarriors.StorageDomain.Core
                 return null;
             if (!File.Exists(path))
                 return null;
-            using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
+            BinaryReader reader = null;
             {
-                if (reader.BaseStream.Length < 1)
-                    return null;
                 try
                 {
+                    reader = new BinaryReader(File.Open(path, FileMode.Open));
+                    if (reader.BaseStream.Length < 1)
+                        return null;
                     int hashLength = reader.ReadInt32();
                     byte[] fileHash = new byte[hashLength];
                     int readResult = reader.Read(fileHash, 0, hashLength);
@@ -182,9 +183,10 @@ namespace GameWarriors.StorageDomain.Core
                 }
                 catch (Exception E)
                 {
-                    _storageEventHandler.LogErrorEvent(E.ToString());
-                    return null;
+                    LogError(E.ToString());
                 }
+                finally { reader?.Dispose(); }
+                return null;
             }
         }
 
@@ -202,20 +204,20 @@ namespace GameWarriors.StorageDomain.Core
                 return null;
             if (!File.Exists(path))
                 return null;
-            using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
+            BinaryReader reader = null;
+            try
             {
+                reader = new BinaryReader(File.Open(path, FileMode.Open));
                 if (reader.BaseStream.Length < 1)
                     return null;
-                try
-                {
-                    return reader.ReadString();
-                }
-                catch (Exception E)
-                {
-                    _storageEventHandler.LogErrorEvent(E.ToString());
-                    return null;
-                }
+                return reader.ReadString();
             }
+            catch (Exception E)
+            {
+                LogError(E.ToString());
+            }
+            finally { reader?.Dispose(); }
+            return null;
         }
 
         public Task<(bool, object)> LoadFileAsync(string path, byte[] key, Type dataType)
@@ -234,47 +236,58 @@ namespace GameWarriors.StorageDomain.Core
                 return (false, default);
             if (!File.Exists(path))
                 return (false, default);
-            using (StreamReader reader = new StreamReader(path))
+            StreamReader reader = null;
+            try
             {
-                try
-                {
-                    string tmp = await reader.ReadToEndAsync();
-                    var data = await Task.Factory.StartNew(() => _jsonHandler.FromJson<T>(tmp));
-                    return (true, data);
-                }
-                catch (Exception E)
-                {
-                    _storageEventHandler.LogErrorEvent(E.ToString());
-                    return (false, default);
-                }
+                reader = new StreamReader(path);
+                string tmp = await reader.ReadToEndAsync();
+                var data = await Task.Factory.StartNew(() => _jsonHandler.FromJson<T>(tmp));
+                return (true, data);
             }
+            catch (Exception E)
+            {
+                LogError(E.ToString());
+                return (false, default);
+            }
+            finally
+            {
+                reader?.Dispose();
+            }
+
         }
 
         public bool SaveDataStringFile(string data, string path)
         {
             if (string.IsNullOrEmpty(path))
                 return false;
+
+            StreamWriter file = null;
             try
             {
-                using (StreamWriter file = new StreamWriter(File.Open(path, FileMode.OpenOrCreate)))
-                {
-                    file.WriteLine(data);
-                    file.BaseStream.SetLength(data.Length);
-                }
+                file = new StreamWriter(File.Open(path, FileMode.OpenOrCreate));
+                file.WriteLine(data);
+                file.BaseStream.SetLength(data.Length);
                 return true;
             }
-            catch
+            catch (Exception E)
             {
-                return false;
+                LogError(E.ToString());
             }
+            finally
+            {
+                file?.Dispose();
+            }
+            return false;
         }
 
         public bool SaveDataStringFile(string data, string path, byte[] key)
         {
             if (string.IsNullOrEmpty(path))
                 return false;
-            using (BinaryWriter file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate)))
+            BinaryWriter file = null;
+            try
             {
+                file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate));
                 if (key != null)
                 {
                     var hash = HashInput(data, key);
@@ -284,32 +297,46 @@ namespace GameWarriors.StorageDomain.Core
                     file.Write(data.Length);
                 }
                 file.Write(data);
+                return true;
             }
-            return true;
+            catch (Exception E)
+            {
+                LogError(E.ToString());
+                return false;
+            }
+            finally
+            {
+                file?.Dispose();
+            }
         }
 
         public bool SaveFile<T>(T data, string path, byte[] key)
         {
             if (string.IsNullOrEmpty(path))
                 return false;
+            BinaryWriter file = null;
             try
             {
                 string tmp = _jsonHandler.ToJson(data);
-                using (BinaryWriter file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate)))
-                {
-                    var hash = HashInput(tmp, key);
-                    file.Write(hash.Length);
-                    //long length = file.BaseStream.Length;
-                    file.Write(hash);
-                    file.Write(tmp.Length);
-                    file.Write(tmp);
-                }
+                file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate));
+                var hash = HashInput(tmp, key);
+                file.Write(hash.Length);
+                //long length = file.BaseStream.Length;
+                file.Write(hash);
+                file.Write(tmp.Length);
+                file.Write(tmp);
                 return true;
             }
-            catch
+            catch (Exception E)
             {
+                LogError(E.ToString());
                 return false;
             }
+            finally
+            {
+                file?.Dispose();
+            }
+
         }
 
         public bool SaveFile<T>(T data, string path)
@@ -321,8 +348,9 @@ namespace GameWarriors.StorageDomain.Core
                 string tmp = _jsonHandler.ToJson(data);
                 return SaveDataStringFile(tmp, path);
             }
-            catch
+            catch (Exception E)
             {
+                LogError(E.ToString());
                 return false;
             }
         }
@@ -404,8 +432,9 @@ namespace GameWarriors.StorageDomain.Core
                     return (true, result);
                 }
             }
-            catch
+            catch (Exception E)
             {
+                LogError(E.ToString());
                 return (false, default);
             }
         }
@@ -436,7 +465,7 @@ namespace GameWarriors.StorageDomain.Core
             }
             catch (Exception E)
             {
-                _storageEventHandler.LogErrorEvent(E.ToString());
+                LogError(E.ToString());
                 return (false, default);
             }
         }
@@ -464,7 +493,7 @@ namespace GameWarriors.StorageDomain.Core
             }
             catch (Exception E)
             {
-                _storageEventHandler.LogErrorEvent(E.ToString());
+                LogError(E.ToString());
                 return false;
             }
         }
@@ -505,7 +534,7 @@ namespace GameWarriors.StorageDomain.Core
             }
             catch (Exception E)
             {
-                _storageEventHandler.LogErrorEvent($"file{dataType} " + E.ToString());
+                LogError($"file{dataType} " + E.ToString());
                 return (false, null);
             }
         }
@@ -534,9 +563,14 @@ namespace GameWarriors.StorageDomain.Core
             }
             catch (Exception E)
             {
-                _storageEventHandler.LogErrorEvent(E.ToString());
+                LogError(E.ToString());
                 return false;
             }
+        }
+
+        private void LogError(string message)
+        {
+            LogErrorListener?.Invoke(message);
         }
     }
 }
