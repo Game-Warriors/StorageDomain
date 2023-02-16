@@ -17,7 +17,7 @@ namespace GameWarriors.StorageDomain.Core
 
         private readonly IFileHandler _fileHandler;
         private readonly IStorageConfig _storageConfig;
-        private readonly Dictionary<Type, IStorageItem> _fileTable;
+        private readonly IList<IStorageItem> _filesList;
         private Dictionary<Type, StorageDatabaseItem> _databaseTable;
         private Dictionary<string, Task> _loadingTable;
 
@@ -41,9 +41,11 @@ namespace GameWarriors.StorageDomain.Core
             GenerateDatabaseFilePath();
             if (!Directory.Exists(_fileRoot))
                 Directory.CreateDirectory(_fileRoot);
-            _fileTable = new Dictionary<Type, IStorageItem>();
-            _loadingTable = new Dictionary<string, Task>();
-            _loadingTable.Add(DATABASE_FILE_NAME, Task.Run(ReadDatabaseFiles));
+            _filesList = new List<IStorageItem>();
+            _loadingTable = new Dictionary<string, Task>
+            {
+                { DATABASE_FILE_NAME, Task.Run(ReadDatabaseFiles) }
+            };
         }
 
 #if UNITY_2018_4_OR_NEWER
@@ -52,8 +54,8 @@ namespace GameWarriors.StorageDomain.Core
         public async Task WaitForLoading()
         {
             await Task.WhenAll(_loadingTable.Values);
-            _loadingTable.Clear();
-            _loadingTable = null;
+            //_loadingTable.Clear();
+            //_loadingTable = null;
         }
 
         T1 IStorage.GetValue<T1>(string key, T1 defualtValue)
@@ -119,6 +121,23 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
+        void IStorage.LoadingModelAsync<T>(string dataName, bool isEncrypt, Action<T> onLoad)
+        {
+            if (onLoad == null)
+                throw new ArgumentNullException($"The onLoad call back is null for dataName {dataName}");
+
+            string path = _fileRoot + dataName;
+            if (_loadingTable.TryGetValue(dataName, out var oldTask))
+            {
+                HandleOldLoading(onLoad, oldTask);
+            }
+            else
+            {
+                Task originTask = HandleNewLoading(isEncrypt, onLoad, path);
+                _loadingTable.Add(dataName, originTask);
+            }
+        }
+
         Task<U> IStorage.LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt)
         {
             string path = _fileRoot + dataName;
@@ -141,6 +160,23 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
+        void IStorage.LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt, Action<U> onLoad)
+        {
+            if (onLoad == null)
+                throw new ArgumentNullException($"The onLoad call back is null for dataName {dataName}");
+
+            string path = _fileRoot + dataName;
+            if (_loadingTable.TryGetValue(dataName, out var oldTask))
+            {
+                HandleOldLoading(onLoad, oldTask);
+            }
+            else
+            {
+                Task originTask = HandleNewLoading(isEncrypt, onLoad, path);
+                _loadingTable.Add(dataName, originTask);
+            }
+        }
+
         void IStorageOperations.StorageUpdate(float deltaTime)
         {
             _timeTmp += deltaTime;
@@ -149,8 +185,10 @@ namespace GameWarriors.StorageDomain.Core
                 try
                 {
                     WriteOnFile();
-                    foreach (IStorageItem item in _fileTable?.Values)
+                    int count = _filesList?.Count ?? 0;
+                    for (int i = 0; i < count; ++i)
                     {
+                        IStorageItem item = _filesList[i];
                         if (item.IsChanged)
                         {
                             string data = item.GetDataString;
@@ -332,32 +370,22 @@ namespace GameWarriors.StorageDomain.Core
         {
             try
             {
-                int length = _fileTable.Count;
-                Task<(bool, object)>[] loadTask = new Task<(bool, object)>[length];
-                int counter = 0;
-                foreach (var item in _fileTable)
+                foreach (var item in _filesList)
                 {
-                    string path = _fileRoot + item.Value.FileName;
-                    if (item.Value.IsEncrypt)
+                    string path = _fileRoot + item.FileName;
+                    if (item.IsEncrypt)
                     {
-                        loadTask[counter] = _fileHandler.LoadEncryptedFileAsync(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV, item.Key);
+                        _loadingTable[item.FileName] = _fileHandler.LoadEncryptedFileAsync(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV, item.DataType);
                     }
                     else
-                        loadTask[counter] = _fileHandler.LoadFileAsync(path, _storageConfig.Key, item.Key);
-
-                    _fileTable[item.Key] = null;
-                    ++counter;
+                        _loadingTable[item.FileName] = _fileHandler.LoadFileAsync(path, _storageConfig.Key, item.DataType);
                 }
-
-                Task.WaitAll(loadTask);
-                for (int i = 0; i < length; ++i)
+                _filesList.Clear();
+                Task wait = Task.WhenAll(_loadingTable.Values);
+                wait.Wait();
+                foreach (var item in _loadingTable.Values)
                 {
-                    (bool, object) result = loadTask[i].Result;
-                    if (result.Item1)
-                    {
-                        IStorageItem item = (IStorageItem)result.Item2;
-                        _fileTable.Add(item.DataType, item);
-                    }
+                    _filesList.Add((IStorageItem)item);
                 }
             }
             catch (Exception E)
@@ -368,8 +396,10 @@ namespace GameWarriors.StorageDomain.Core
 
         private void SaveStorageItemFiles()
         {
-            foreach (IStorageItem item in _fileTable?.Values)
+            int count = _filesList?.Count ?? 0;
+            for (int i = 0; i < count; ++i)
             {
+                IStorageItem item = _filesList[i];
                 if (item.IsChanged)
                 {
                     string data = item.GetDataString;
@@ -404,27 +434,25 @@ namespace GameWarriors.StorageDomain.Core
             (bool isSuccess, T data) = loadTask.Result;
             if (isSuccess)
             {
-                lock (_fileTable)
+                if (data.IsInvalid)
                 {
-                    _fileTable.Add(typeof(T), data);
+                    data.Initialization();
                 }
-            }
-            //_loadDataTaskList = null;
-
-            Type dataType = typeof(T);
-            if (_fileTable.TryGetValue(dataType, out var file))
-            {
-                if (file.IsInvalid)
+                lock (_filesList)
                 {
-                    file.Initialization();
+                    _filesList.Add(data);
                 }
-                return (T)file;
+                return (T)data;
             }
             else
             {
+                //LogError($"failed to loading the dataType:{dataType}");
                 T newFile = new T();
                 newFile.Initialization();
-                _fileTable.Add(dataType, newFile);
+                lock (_filesList)
+                {
+                    _filesList.Add(newFile);
+                }
                 return newFile;
             }
         }
@@ -442,6 +470,31 @@ namespace GameWarriors.StorageDomain.Core
         private void LogError(string message)
         {
             LogErrorListener?.Invoke(message);
+        }
+
+        private static void HandleOldLoading<T>(Action<T> onLoad, Task oldTask) where T : IStorageItem, new()
+        {
+            Task<T> originTask = oldTask as Task<T>;
+            if (originTask.IsCompletedSuccessfully)
+            {
+                onLoad(originTask.Result);
+            }
+            else
+                originTask.ContinueWith(task => onLoad(task.Result));
+        }
+
+        private Task HandleNewLoading<T>(bool isEncrypt, Action<T> onLoad, string path) where T : IStorageItem, new()
+        {
+            Task originTask;
+            if (isEncrypt)
+            {
+                originTask = _fileHandler.LoadEncryptedFileAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV)
+                    .ContinueWith(FetchLoadingData<T>).ContinueWith(task => onLoad(task.Result));
+            }
+            else
+                originTask = _fileHandler.LoadFileAsync<T>(path, _storageConfig.Key)
+                    .ContinueWith(FetchLoadingData<T>).ContinueWith(task => onLoad(task.Result));
+            return originTask;
         }
     }
 }

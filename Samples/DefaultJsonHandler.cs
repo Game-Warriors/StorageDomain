@@ -1,7 +1,7 @@
 using GameWarriors.StorageDomain.Abstraction;
 using System;
 
-namespace Management.Handler.Json
+namespace Management.Handlers.Json
 {
 #if UNITY_2018_4_OR_NEWER
     using UnityEngine;
