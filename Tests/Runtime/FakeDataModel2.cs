@@ -46,5 +46,10 @@ namespace GameWarriors.StorageDomain.Tests
         {
             IsChanged = false;
         }
+
+        public void ApplyChange()
+        {
+            IsChanged = true;
+        }
     }
 }

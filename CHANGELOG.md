@@ -1,3 +1,6 @@
+  version : 0.1.3
+  implementing parallel saving database files and custom file, improvement auto save
+
   version : 0.1.2
   add new loading method by callback into storage system to call from class constructors
   fix storage loading pipeline bug

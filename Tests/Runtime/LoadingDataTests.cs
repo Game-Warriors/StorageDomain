@@ -1,35 +1,14 @@
 using GameWarriors.StorageDomain.Abstraction;
 using GameWarriors.StorageDomain.Core;
 using NUnit.Framework;
-using System;
 using System.Collections;
-using System.Text;
 using System.Threading.Tasks;
+#if UNITY_2018_4_OR_NEWER
 using UnityEngine;
 using UnityEngine.TestTools;
 
 namespace GameWarriors.StorageDomain.Tests
 {
-    public class DefaultJsonHandler : IStorageJsonHandler
-    {
-        public T FromJson<T>(string dataString)
-        {
-            return JsonUtility.FromJson<T>(dataString);
-        }
-
-        public object FromJson(string tmp, Type dataType)
-        {
-            return JsonUtility.FromJson(tmp, dataType);
-        }
-
-        public string ToJson(object input)
-        {
-            return JsonUtility.ToJson(input);
-        }
-    }
-
-
-
     public class LoadingDataTests
     {
         private FakeDataModel _dataModel1;
@@ -78,3 +57,4 @@ namespace GameWarriors.StorageDomain.Tests
         }
     }
 }
+#endif

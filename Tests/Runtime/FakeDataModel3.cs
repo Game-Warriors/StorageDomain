@@ -4,9 +4,9 @@ using UnityEngine;
 
 namespace GameWarriors.StorageDomain.Tests
 {
-    internal class FakeDataModel : IStorageItem
+    internal class FakeDataModel3 : IStorageItem
     {
-        internal const string FILE_NAME = "fake.bin";
+        internal const string FILE_NAME = "fake3.bin";
         [SerializeField]
         private string _name;
         [SerializeField]
@@ -24,7 +24,7 @@ namespace GameWarriors.StorageDomain.Tests
 
         public string GetDataString => JsonUtility.ToJson(this);
 
-        public bool IsChanged { get; private set; }
+        public bool IsChanged => true;
 
         public bool IsInvalid => false;
 
@@ -35,22 +35,16 @@ namespace GameWarriors.StorageDomain.Tests
 
         public void Initialization()
         {
-            Debug.Log("alooooooo");
             _name = "mahdi";
             _value = 10;
             _maxDistance = 1015.13135151d;
             _distance = 99.9f;
-            IsChanged = true;
+
         }
 
         public void SetAsSaved()
         {
-            IsChanged = false;
-        }
 
-        public void ApplyChange()
-        {
-            IsChanged = true;
         }
     }
 }

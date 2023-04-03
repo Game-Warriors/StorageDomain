@@ -51,11 +51,9 @@ namespace GameWarriors.StorageDomain.Core
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public async Task WaitForLoading()
+        public Task WaitForLoading()
         {
-            await Task.WhenAll(_loadingTable.Values);
-            //_loadingTable.Clear();
-            //_loadingTable = null;
+            return Task.WhenAll(_loadingTable.Values);
         }
 
         T1 IStorage.GetValue<T1>(string key, T1 defualtValue)
@@ -182,9 +180,10 @@ namespace GameWarriors.StorageDomain.Core
             _timeTmp += deltaTime;
             if (_timeTmp > _storageConfig.SaveingInterval)
             {
+                bool isResetTime = true;
                 try
                 {
-                    WriteOnFile();
+                    Task writeDatabaseTask = WriteOnFileAsync();
                     int count = _filesList?.Count ?? 0;
                     for (int i = 0; i < count; ++i)
                     {
@@ -201,16 +200,21 @@ namespace GameWarriors.StorageDomain.Core
                                 _fileHandler.SaveDataStringFile(data, path, _storageConfig.Key);
                             item.SetAsSaved();
 
-                            if (!item.IsChanged)
+                            if (!item.IsChanged)//prevent to permanent change file block save auto update
+                            {
+                                isResetTime = false;
                                 break;
+                            }
                         }
                     }
+                    writeDatabaseTask.Wait();
                 }
                 catch (Exception E)
                 {
                     LogError(E.ToString());
                 }
-                _timeTmp = 0;
+                if (isResetTime)
+                    _timeTmp = 0;
             }
         }
 
@@ -282,6 +286,7 @@ namespace GameWarriors.StorageDomain.Core
         {
             if (_isDataChange)
             {
+                _isDataChange = false;
                 using (StreamWriter writer = new StreamWriter(File.Open(_databaseFilePath, FileMode.OpenOrCreate)))
                 {
                     foreach (var database in _databaseTable)
@@ -295,8 +300,16 @@ namespace GameWarriors.StorageDomain.Core
                         }
                     }
                 }
-                _isDataChange = false;
             }
+        }
+
+        private Task WriteOnFileAsync()
+        {
+            if (_isDataChange)
+            {
+                return Task.Run(WriteOnFile);
+            }
+            return Task.CompletedTask;
         }
 
         private void ReadDatabaseFiles()
