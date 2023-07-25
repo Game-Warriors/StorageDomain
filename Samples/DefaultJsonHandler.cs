@@ -5,19 +5,19 @@ namespace Management.Handlers.Json
 {
 #if UNITY_2018_4_OR_NEWER
     using UnityEngine;
-    public class DefaultJsonHandler : IStorageJsonHandler
+    public class DefaultJsonHandler : IStorageSerializationHandler
     {
-        public T FromJson<T>(string dataString)
+        public T Deserialize<T>(string dataString)
         {
             return JsonUtility.FromJson<T>(dataString);
         }
 
-        public object FromJson(string tmp, Type dataType)
+        public object Deserialize(string tmp, Type dataType)
         {
             return JsonUtility.FromJson(tmp, dataType);
         }
 
-        public string ToJson(object input)
+        public string Serialize(object input)
         {
             return JsonUtility.ToJson(input);
         }

@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 
 namespace GameWarriors.StorageDomain.Abstraction
 {
+    /// <summary>
+    /// The base abstraction to provide some file operations like saving and loading.
+    /// </summary>
     public interface IFileHandler
     {
         event Action<string> LogErrorListener;

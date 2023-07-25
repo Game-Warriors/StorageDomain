@@ -19,7 +19,7 @@ namespace GameWarriors.StorageDomain.Data
 
         public bool IsEncrypt { get; private set; }
 
-        public string FileName { get; private set; }
+        public string ModelName { get; private set; }
 
         public Type DataType
         {
@@ -31,7 +31,6 @@ namespace GameWarriors.StorageDomain.Data
             }
         }
 
-        public string GetDataString => JsonUtility.ToJson(this);
 
         public bool IsChanged { get; private set; }
 
@@ -62,7 +61,7 @@ namespace GameWarriors.StorageDomain.Data
 
         public void SetFileName(string fileName)
         {
-            FileName = fileName;
+            ModelName = fileName;
         }
 
         public void UpdateItem(T item, bool isAdd = true)

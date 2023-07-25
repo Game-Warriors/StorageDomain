@@ -9,13 +9,13 @@ namespace GameWarriors.StorageDomain.Core
 {
     public class FileHandler : IFileHandler
     {
-        private readonly IStorageJsonHandler _jsonHandler;
+        private readonly IStorageSerializationHandler _jsonHandler;
         public event Action<string> LogErrorListener;
 
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public FileHandler(IStorageJsonHandler jsonHandler)
+        public FileHandler(IStorageSerializationHandler jsonHandler)
         {
             _jsonHandler = jsonHandler;
         }
@@ -106,7 +106,7 @@ namespace GameWarriors.StorageDomain.Core
                 reader = null;
                 if (IsSameBytes(fileHash, dataHash))
                 {
-                    var data = _jsonHandler.FromJson(tmp, dataType);
+                    var data = _jsonHandler.Deserialize(tmp, dataType);
                     return (true, data);
                 }
                 else
@@ -141,7 +141,7 @@ namespace GameWarriors.StorageDomain.Core
                 reader = null;
                 if (IsSameBytes(fileHash, dataHash))
                 {
-                    var data = _jsonHandler.FromJson<T>(tmp);
+                    var data = _jsonHandler.Deserialize<T>(tmp);
                     return (true, data);
                 }
                 else
@@ -241,7 +241,7 @@ namespace GameWarriors.StorageDomain.Core
             {
                 reader = new StreamReader(path);
                 string tmp = await reader.ReadToEndAsync();
-                var data = await Task.Factory.StartNew(() => _jsonHandler.FromJson<T>(tmp));
+                var data = await Task.Factory.StartNew(() => _jsonHandler.Deserialize<T>(tmp));
                 return (true, data);
             }
             catch (Exception E)
@@ -317,7 +317,7 @@ namespace GameWarriors.StorageDomain.Core
             BinaryWriter file = null;
             try
             {
-                string tmp = _jsonHandler.ToJson(data);
+                string tmp = _jsonHandler.Serialize(data);
                 file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate));
                 var hash = HashInput(tmp, key);
                 file.Write(hash.Length);
@@ -345,7 +345,7 @@ namespace GameWarriors.StorageDomain.Core
                 return false;
             try
             {
-                string tmp = _jsonHandler.ToJson(data);
+                string tmp = _jsonHandler.Serialize(data);
                 return SaveDataStringFile(tmp, path);
             }
             catch (Exception E)
@@ -428,7 +428,7 @@ namespace GameWarriors.StorageDomain.Core
                             }
                         }
                     }
-                    T result = await Task.Factory.StartNew(() => { string stringData = encoding.GetString(data); return _jsonHandler.FromJson<T>(stringData); });
+                    T result = await Task.Factory.StartNew(() => { string stringData = encoding.GetString(data); return _jsonHandler.Deserialize<T>(stringData); });
                     return (true, result);
                 }
             }
@@ -460,7 +460,7 @@ namespace GameWarriors.StorageDomain.Core
                     }
                 }
                 string stringData = encoding.GetString(data);
-                T result = _jsonHandler.FromJson<T>(stringData);
+                T result = _jsonHandler.Deserialize<T>(stringData);
                 return (true, result);
             }
             catch (Exception E)
@@ -476,7 +476,7 @@ namespace GameWarriors.StorageDomain.Core
             {
                 using (RijndaelManaged AES = new RijndaelManaged())
                 {
-                    string stringData = _jsonHandler.ToJson(source);
+                    string stringData = _jsonHandler.Serialize(source);
                     byte[] data = Convert.FromBase64String(stringData);
                     //byte[] data = encoding.GetBytes(stringData);
                     using (MemoryStream memoryStream = new MemoryStream(data))
@@ -529,7 +529,7 @@ namespace GameWarriors.StorageDomain.Core
                 //Debug.Log(stringData);
                 //string stringData = Convert.ToBase64String(data);
                 //Convert.for
-                object result = _jsonHandler.FromJson(stringData, dataType);
+                object result = _jsonHandler.Deserialize(stringData, dataType);
                 return (true, result);
             }
             catch (Exception E)
