@@ -17,8 +17,8 @@ namespace GameWarriors.StorageDomain.Tests
         private FakeDataModel3 _dataModel3;
         private StorageSystem InitSystem()
         {
-            IStorageJsonHandler jsonHandler = new DefaultJsonHandler();
-            IFileHandler fileHandler = new FileHandler(jsonHandler);
+            IStorageSerializationHandler jsonHandler = new DefaultJsonHandler();
+            IPersistDataHandler fileHandler = new FileHandler(jsonHandler, null);
             IStorageConfig storageConfig = new FakeStorageConfig();
             StorageSystem storage = new StorageSystem(fileHandler, storageConfig);
             return storage;
@@ -34,7 +34,7 @@ namespace GameWarriors.StorageDomain.Tests
             yield return new WaitUntil(() => task.IsCompleted);
             _dataModel1.ApplyChange();
             _dataModel2.ApplyChange();
-            IStorageOperations storageOperations = storage as IStorageOperations;
+            IStorageOperation storageOperations = storage as IStorageOperation;
             storageOperations.StorageUpdate(100);
             Assert.AreEqual(_dataModel1.IsChanged, false);
             Assert.AreEqual(_dataModel2.IsChanged, true);
@@ -49,7 +49,7 @@ namespace GameWarriors.StorageDomain.Tests
             yield return new WaitUntil(() => task.IsCompleted);
             _dataModel1.ApplyChange();
             _dataModel2.ApplyChange();
-            IStorageOperations storageOperations = storage as IStorageOperations;
+            IStorageOperation storageOperations = storage as IStorageOperation;
             storageOperations.StorageUpdate(100);
             storageOperations.StorageUpdate(100);
             Assert.AreEqual(_dataModel1.IsChanged, false);

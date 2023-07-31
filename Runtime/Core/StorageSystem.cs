@@ -18,7 +18,7 @@ namespace GameWarriors.StorageDomain.Core
         private const string DATABASE_FILE_NAME = "DatabaseFile.bin";
         private const string DATABASE_DIRECTORY_NAME = "{0}_Storage";
 
-        private readonly IFileHandler _fileHandler;
+        private readonly IPersistDataHandler _fileHandler;
         private readonly IStorageConfig _storageConfig;
         private readonly IList<IStorageItem> _filesList;
         private Dictionary<Type, StorageDatabaseItem> _databaseTable;
@@ -36,7 +36,7 @@ namespace GameWarriors.StorageDomain.Core
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public StorageSystem(IFileHandler fileHandler, IStorageConfig storageConfig)
+        public StorageSystem(IPersistDataHandler fileHandler, IStorageConfig storageConfig)
         {
             _fileHandler = fileHandler;
             _storageConfig = storageConfig;
@@ -112,10 +112,10 @@ namespace GameWarriors.StorageDomain.Core
                 Task<T> task;
                 if (isEncrypt)
                 {
-                    task = _fileHandler.LoadEncryptedFileAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<T>);
+                    task = _fileHandler.LoadEncryptedDataAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<T>);
                 }
                 else
-                    task = _fileHandler.LoadFileAsync<T>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<T>);
+                    task = _fileHandler.LoadDataAsync<T>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<T>);
 
                 _loadingTable.Add(dataName, task);
                 return task;
@@ -151,10 +151,10 @@ namespace GameWarriors.StorageDomain.Core
                 Task<U> task;
                 if (isEncrypt)
                 {
-                    task = _fileHandler.LoadEncryptedFileAsync<U>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<U>);
+                    task = _fileHandler.LoadEncryptedDataAsync<U>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV).ContinueWith(FetchLoadingData<U>);
                 }
                 else
-                    task = _fileHandler.LoadFileAsync<U>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<U>);
+                    task = _fileHandler.LoadDataAsync<U>(path, _storageConfig.Key).ContinueWith(FetchLoadingData<U>);
 
                 _loadingTable.Add(dataName, task);
                 return task;
@@ -196,10 +196,10 @@ namespace GameWarriors.StorageDomain.Core
                             string path = _fileRoot + item.ModelName;
                             if (item.IsEncrypt)
                             {
-                                _fileHandler.SaveEncryptedFile(item, Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV);
+                                _fileHandler.SaveEncryptedData(item, Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV);
                             }
                             else
-                                _fileHandler.SaveFile(item, path, _storageConfig.Key);
+                                _fileHandler.SaveData(item, path, _storageConfig.Key);
                             item.SetAsSaved();
 
                             if (!item.IsChanged)//prevent to permanent change file block save auto update
@@ -392,10 +392,10 @@ namespace GameWarriors.StorageDomain.Core
                     string path = _fileRoot + item.ModelName;
                     if (item.IsEncrypt)
                     {
-                        _loadingTable[item.ModelName] = _fileHandler.LoadEncryptedFileAsync(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV, item.DataType);
+                        _loadingTable[item.ModelName] = _fileHandler.LoadEncrypteDataAsync(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV, item.DataType);
                     }
                     else
-                        _loadingTable[item.ModelName] = _fileHandler.LoadFileAsync(path, _storageConfig.Key, item.DataType);
+                        _loadingTable[item.ModelName] = _fileHandler.LoadDataAsync(path, _storageConfig.Key, item.DataType);
                 }
                 _filesList.Clear();
                 Task wait = Task.WhenAll(_loadingTable.Values);
@@ -422,10 +422,10 @@ namespace GameWarriors.StorageDomain.Core
                     string path = _fileRoot + item.ModelName;
                     if (item.IsEncrypt)
                     {
-                        _fileHandler.SaveEncryptedFile(item, Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV);
+                        _fileHandler.SaveEncryptedData(item, Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV);
                     }
                     else
-                        _fileHandler.SaveFile(item, path, _storageConfig.Key);
+                        _fileHandler.SaveData(item, path, _storageConfig.Key);
                     item.SetAsSaved();
                 }
             }
@@ -494,11 +494,11 @@ namespace GameWarriors.StorageDomain.Core
             Task originTask;
             if (isEncrypt)
             {
-                originTask = _fileHandler.LoadEncryptedFileAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV)
+                originTask = _fileHandler.LoadEncryptedDataAsync<T>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV)
                     .ContinueWith(FetchLoadingData<T>).ContinueWith(task => onLoad(task.Result));
             }
             else
-                originTask = _fileHandler.LoadFileAsync<T>(path, _storageConfig.Key)
+                originTask = _fileHandler.LoadDataAsync<T>(path, _storageConfig.Key)
                     .ContinueWith(FetchLoadingData<T>).ContinueWith(task => onLoad(task.Result));
             return originTask;
         }

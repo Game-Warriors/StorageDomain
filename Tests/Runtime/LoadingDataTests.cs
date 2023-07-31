@@ -49,8 +49,8 @@ namespace GameWarriors.StorageDomain.Tests
 
         private StorageSystem InitSystem()
         {
-            IStorageJsonHandler jsonHandler = new DefaultJsonHandler();
-            IFileHandler fileHandler = new FileHandler(jsonHandler);
+            IStorageSerializationHandler jsonHandler = new DefaultJsonHandler();
+            IPersistDataHandler fileHandler = new FileHandler(jsonHandler, null);
             IStorageConfig storageConfig = new FakeStorageConfig();
             StorageSystem storage = new StorageSystem(fileHandler, storageConfig);
             return storage;

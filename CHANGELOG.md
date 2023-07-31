@@ -1,3 +1,6 @@
+  version : 0.1.5
+  add new ICryptographyHandler abstraction and use it in FileHandler class for cryptography and hashing operations. 
+
   version : 0.1.4
   update descriptions and summaries
 

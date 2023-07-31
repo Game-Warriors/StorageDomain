@@ -18,11 +18,10 @@ namespace GameWarriors.StorageDomain.Tests
 
         public bool IsEncrypt => false;
 
-        public string FileName => FILE_NAME;
+        public string ModelName => FILE_NAME;
 
         public Type DataType => typeof(FakeDataModel);
 
-        public string GetDataString => JsonUtility.ToJson(this);
 
         public bool IsChanged { get; private set; }
 

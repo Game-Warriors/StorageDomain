@@ -1,23 +1,26 @@
 ﻿using GameWarriors.StorageDomain.Abstraction;
 using System;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace GameWarriors.StorageDomain.Core
 {
-    public class FileHandler : IFileHandler
+    /// <summary>
+    /// This class provide file saving and loading utility, for serialization and encryption features need to handlers class 
+    /// </summary>
+    public class FileHandler : IPersistDataHandler
     {
         private readonly IStorageSerializationHandler _jsonHandler;
-        public event Action<string> LogErrorListener;
+        private readonly ICryptographyHandler _cryptoHandler;
 
 #if UNITY_2018_4_OR_NEWER
         [UnityEngine.Scripting.Preserve]
 #endif
-        public FileHandler(IStorageSerializationHandler jsonHandler)
+        public FileHandler(IStorageSerializationHandler jsonHandler, ICryptographyHandler cryptographyHandler)
         {
             _jsonHandler = jsonHandler;
+            _cryptoHandler = cryptographyHandler != null ? cryptographyHandler : new OldDefaultCryptographyHandler();
         }
 
         //public (bool, T) LoadFromRegistry<T>(string key, byte[] hashKey)
@@ -101,7 +104,7 @@ namespace GameWarriors.StorageDomain.Core
                 int readResult = reader.Read(fileHash, 0, hashLength);
                 int stringLength = reader.ReadInt32();
                 string tmp = reader.ReadString();
-                byte[] dataHash = HashInput(tmp, key);
+                byte[] dataHash = _cryptoHandler.HashInput(tmp, key);
                 reader?.Dispose();
                 reader = null;
                 if (IsSameBytes(fileHash, dataHash))
@@ -112,15 +115,14 @@ namespace GameWarriors.StorageDomain.Core
                 else
                     return (false, default);
             }
-            catch (Exception E)
+            catch
             {
-                LogError($"file:{path} , " + E.ToString());
                 reader?.Dispose();
+                throw;
             }
-            return (false, default);
         }
 
-        public (bool, T) LoadFile<T>(string path, byte[] key)
+        public (bool, T) LoadData<T>(string path, byte[] key)
         {
             if (string.IsNullOrEmpty(path))
                 return (false, default);
@@ -136,7 +138,7 @@ namespace GameWarriors.StorageDomain.Core
                 int readResult = reader.Read(fileHash, 0, hashLength);
                 int stringLength = reader.ReadInt32();
                 string tmp = reader.ReadString();
-                byte[] dataHash = HashInput(tmp, key);
+                byte[] dataHash = _cryptoHandler.HashInput(tmp, key);
                 reader?.Dispose();
                 reader = null;
                 if (IsSameBytes(fileHash, dataHash))
@@ -147,15 +149,15 @@ namespace GameWarriors.StorageDomain.Core
                 else
                     return (false, default);
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
                 reader?.Dispose();
+                throw;
             }
-            return (false, default);
+
         }
 
-        public string LoadDataStringFile(string path, byte[] key)
+        public string LoadStringData(string path, byte[] key)
         {
             if (string.IsNullOrEmpty(path))
                 return null;
@@ -173,7 +175,7 @@ namespace GameWarriors.StorageDomain.Core
                     int readResult = reader.Read(fileHash, 0, hashLength);
                     int stringLength = reader.ReadInt32();
                     string tmp = reader.ReadString();
-                    byte[] dataHash = HashInput(tmp, key);
+                    byte[] dataHash = _cryptoHandler.HashInput(tmp, key);
                     if (IsSameBytes(fileHash, dataHash))
                     {
                         return tmp;
@@ -181,19 +183,18 @@ namespace GameWarriors.StorageDomain.Core
                     else
                         return null;
                 }
-                catch (Exception E)
+                catch
                 {
-                    LogError(E.ToString());
+                    throw;
                 }
                 finally { reader?.Dispose(); }
-                return null;
             }
         }
 
-        public Task<string> LoadDataStringFileAsync(string path, byte[] key)
+        public Task<string> LoadStringDataAsync(string path, byte[] key)
         {
             if (key != null)
-                return Task.Factory.StartNew(() => LoadDataStringFile(path, key));
+                return Task.Factory.StartNew(() => LoadStringData(path, key));
             else
                 return Task.Factory.StartNew(() => LoadDataStringFile(path));
         }
@@ -212,25 +213,24 @@ namespace GameWarriors.StorageDomain.Core
                     return null;
                 return reader.ReadString();
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
+                throw;
             }
             finally { reader?.Dispose(); }
-            return null;
         }
 
-        public Task<(bool, object)> LoadFileAsync(string path, byte[] key, Type dataType)
+        public Task<(bool, object)> LoadDataAsync(string path, byte[] key, Type dataType)
         {
             return Task.Factory.StartNew(() => LoadFile(path, key, dataType));
         }
 
-        public Task<(bool, T)> LoadFileAsync<T>(string path, byte[] key)
+        public Task<(bool, T)> LoadDataAsync<T>(string path, byte[] key)
         {
-            return Task.Factory.StartNew(() => LoadFile<T>(path, key));
+            return Task.Factory.StartNew(() => LoadData<T>(path, key));
         }
 
-        public async Task<(bool, T)> LoadFileAsync<T>(string path)
+        public async Task<(bool, T)> LoadDataAsync<T>(string path)
         {
             if (string.IsNullOrEmpty(path))
                 return (false, default);
@@ -241,13 +241,12 @@ namespace GameWarriors.StorageDomain.Core
             {
                 reader = new StreamReader(path);
                 string tmp = await reader.ReadToEndAsync();
-                var data = await Task.Factory.StartNew(() => _jsonHandler.Deserialize<T>(tmp));
+                T data = await Task.Factory.StartNew(() => _jsonHandler.Deserialize<T>(tmp));
                 return (true, data);
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return (false, default);
+                throw;
             }
             finally
             {
@@ -269,18 +268,17 @@ namespace GameWarriors.StorageDomain.Core
                 file.BaseStream.SetLength(data.Length);
                 return true;
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
+                throw;
             }
             finally
             {
                 file?.Dispose();
             }
-            return false;
         }
 
-        public bool SaveDataStringFile(string data, string path, byte[] key)
+        public bool SaveStringData(string data, string path, byte[] key)
         {
             if (string.IsNullOrEmpty(path))
                 return false;
@@ -290,7 +288,7 @@ namespace GameWarriors.StorageDomain.Core
                 file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate));
                 if (key != null)
                 {
-                    var hash = HashInput(data, key);
+                    byte[] hash = _cryptoHandler.HashInput(data, key);
                     file.Write(hash.Length);
                     //long length = file.BaseStream.Length;
                     file.Write(hash);
@@ -299,10 +297,9 @@ namespace GameWarriors.StorageDomain.Core
                 file.Write(data);
                 return true;
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return false;
+                throw;
             }
             finally
             {
@@ -310,7 +307,7 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-        public bool SaveFile<T>(T data, string path, byte[] key)
+        public bool SaveData<T>(T data, string path, byte[] key)
         {
             if (string.IsNullOrEmpty(path))
                 return false;
@@ -319,7 +316,7 @@ namespace GameWarriors.StorageDomain.Core
             {
                 string tmp = _jsonHandler.Serialize(data);
                 file = new BinaryWriter(File.Open(path, FileMode.OpenOrCreate));
-                var hash = HashInput(tmp, key);
+                byte[] hash = _cryptoHandler.HashInput(tmp, key);
                 file.Write(hash.Length);
                 //long length = file.BaseStream.Length;
                 file.Write(hash);
@@ -327,10 +324,9 @@ namespace GameWarriors.StorageDomain.Core
                 file.Write(tmp);
                 return true;
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return false;
+                throw;
             }
             finally
             {
@@ -339,7 +335,7 @@ namespace GameWarriors.StorageDomain.Core
 
         }
 
-        public bool SaveFile<T>(T data, string path)
+        public bool SaveData<T>(T data, string path)
         {
             if (string.IsNullOrEmpty(path))
                 return false;
@@ -348,21 +344,20 @@ namespace GameWarriors.StorageDomain.Core
                 string tmp = _jsonHandler.Serialize(data);
                 return SaveDataStringFile(tmp, path);
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return false;
+                throw;
             }
         }
 
-        public Task<bool> SaveFileAsync<T>(T data, string path, Action onDone = null)
+        public Task<bool> SaveDataAsync<T>(T data, string path, Action onDone = null)
         {
-            return Task.Factory.StartNew(() => { bool result = SaveFile<T>(data, path); onDone?.Invoke(); return result; });
+            return Task.Factory.StartNew(() => { bool result = SaveData<T>(data, path); onDone?.Invoke(); return result; });
         }
 
-        public Task<bool> SaveFileAsync<T>(T data, string path, byte[] key, Action onDone = null)
+        public Task<bool> SaveDataAsync<T>(T data, string path, byte[] key, Action onDone = null)
         {
-            return Task.Factory.StartNew(() => { bool result = SaveFile<T>(data, path, key); onDone?.Invoke(); return result; });
+            return Task.Factory.StartNew(() => { bool result = SaveData<T>(data, path, key); onDone?.Invoke(); return result; });
         }
 
         //public void DeleteRegister(string key)
@@ -371,134 +366,55 @@ namespace GameWarriors.StorageDomain.Core
         //    PlayerPrefs.DeleteKey(key + "hashData");
         //}
 
-        public void DeleteFile(string path)
+        public void DeleteData(string path)
         {
             File.Delete(path);
         }
 
-        private byte[] HashInput(string input, byte[] key)
-        {
-            byte[] tmp = System.Text.Encoding.Unicode.GetBytes(input);
-            using (var sha = new HMACSHA256(key))
-            {
-                var hash = sha.ComputeHash(tmp);
-                return hash;
-            }
-        }
 
-        private string HashInputString(string input, byte[] key)
-        {
-            byte[] tmp = System.Text.Encoding.Unicode.GetBytes(input);
-            using (var sha = new HMACSHA256(key))
-            {
-                var hash = sha.ComputeHash(tmp);
-                return Convert.ToBase64String(hash);
-            }
-        }
 
-        private bool IsSameBytes(byte[] T1, byte[] T2)
-        {
-            int length = T1.Length;
-            if (T2.Length != length)
-                return false;
-            var result = Parallel.For(0, length, (index, state) =>
-              {
-                  if (T1[index] != T2[index])
-                      state.Break();
-              });
-            return !result.LowestBreakIteration.HasValue;
-        }
-
-        public async Task<(bool, T)> LoadEncryptedFileAsync<T>(Encoding encoding, string path, byte[] key, byte[] iv)
+        public async Task<(bool, T)> LoadEncryptedDataAsync<T>(Encoding encoding, string path, byte[] key, byte[] iv)
         {
             try
             {
                 byte[] data = null;
-                using (RijndaelManaged AES = new RijndaelManaged())
+                using (FileStream fileStream = File.OpenRead(path))
                 {
-                    ICryptoTransform cryptoTransform = AES.CreateDecryptor(key, iv);
-                    using (FileStream fileStream = File.OpenRead(path))
-                    {
-                        using (CryptoStream cryptStream = new CryptoStream(fileStream, cryptoTransform, CryptoStreamMode.Read))
-                        {
-                            using (MemoryStream memoryStream = new MemoryStream())
-                            {
-                                await cryptStream.CopyToAsync(memoryStream);
-                                data = memoryStream.GetBuffer();
-                            }
-                        }
-                    }
-                    T result = await Task.Factory.StartNew(() => { string stringData = encoding.GetString(data); return _jsonHandler.Deserialize<T>(stringData); });
-                    return (true, result);
+                    data = await _cryptoHandler.DecryptDataAsync(fileStream, key, iv);
                 }
+                if (data == null)
+                    return (false, default);
+                T result = await Task.Factory.StartNew(() => { string stringData = encoding.GetString(data); return _jsonHandler.Deserialize<T>(stringData); });
+                return (true, result);
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return (false, default);
+                throw;
             }
         }
 
-        public (bool, T) LoadEncryptedFile<T>(Encoding encoding, string path, byte[] key, byte[] iv)
+        public (bool, T) LoadEncryptedData<T>(Encoding encoding, string path, byte[] key, byte[] iv)
         {
             try
             {
                 byte[] data = null;
-                using (RijndaelManaged AES = new RijndaelManaged())
+                using (FileStream fileStream = File.OpenRead(path))
                 {
-                    ICryptoTransform cryptoTransform = AES.CreateDecryptor(key, iv);
-                    using (FileStream fileStream = File.OpenRead(path))
-                    {
-                        using (CryptoStream cryptStream = new CryptoStream(fileStream, cryptoTransform, CryptoStreamMode.Read))
-                        {
-                            using (MemoryStream memoryStream = new MemoryStream())
-                            {
-                                cryptStream.CopyTo(memoryStream);
-                                data = memoryStream.GetBuffer();
-                            }
-                        }
-                    }
+                    data = _cryptoHandler.DecryptData(fileStream, key, iv);
                 }
+                if (data == null)
+                    return (false, default);
                 string stringData = encoding.GetString(data);
                 T result = _jsonHandler.Deserialize<T>(stringData);
                 return (true, result);
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return (false, default);
+                throw;
             }
         }
 
-        public bool SaveEncryptedFile<T>(T source, Encoding encoding, string path, byte[] key, byte[] iv)
-        {
-            try
-            {
-                using (RijndaelManaged AES = new RijndaelManaged())
-                {
-                    string stringData = _jsonHandler.Serialize(source);
-                    byte[] data = Convert.FromBase64String(stringData);
-                    //byte[] data = encoding.GetBytes(stringData);
-                    using (MemoryStream memoryStream = new MemoryStream(data))
-                    {
-                        ICryptoTransform cryptoTransform = AES.CreateEncryptor(key, iv);
-                        using (CryptoStream cryptStream = new CryptoStream(memoryStream, cryptoTransform, CryptoStreamMode.Read))
-                        {
-                            using (FileStream fileStream = File.OpenWrite(path))
-                                cryptStream.CopyTo(fileStream);
-                        }
-                    }
-                }
-                return true;
-            }
-            catch (Exception E)
-            {
-                LogError(E.ToString());
-                return false;
-            }
-        }
-
-        public Task<(bool, object)> LoadEncryptedFileAsync(Encoding encoding, string path, byte[] key, byte[] iv, Type dataType)
+        public Task<(bool, object)> LoadEncrypteDataAsync(Encoding encoding, string path, byte[] key, byte[] iv, Type dataType)
         {
             return Task.Run(() => LoadEncryptedFile(encoding, path, key, iv, dataType));
         }
@@ -510,67 +426,70 @@ namespace GameWarriors.StorageDomain.Core
             try
             {
                 byte[] data = null;
-                using (RijndaelManaged AES = new RijndaelManaged())
+                using (FileStream fileStream = File.OpenRead(path))
                 {
-                    ICryptoTransform cryptoTransform = AES.CreateDecryptor(key, iv);
-                    using (FileStream fileStream = File.OpenRead(path))
-                    {
-                        using (CryptoStream cryptStream = new CryptoStream(fileStream, cryptoTransform, CryptoStreamMode.Read))
-                        {
-                            using (MemoryStream memoryStream = new MemoryStream())
-                            {
-                                cryptStream.CopyTo(memoryStream);
-                                data = memoryStream.GetBuffer();
-                            }
-                        }
-                    }
+                    data = _cryptoHandler.DecryptData(fileStream, key, iv);
                 }
+                if (data == null)
+                    return (false, default);
                 string stringData = encoding.GetString(data);
-                //Debug.Log(stringData);
-                //string stringData = Convert.ToBase64String(data);
-                //Convert.for
                 object result = _jsonHandler.Deserialize(stringData, dataType);
                 return (true, result);
             }
-            catch (Exception E)
+            catch
             {
-                LogError($"file{dataType} " + E.ToString());
-                return (false, null);
+                throw;
             }
         }
 
-        public bool SaveEncryptedStringFile(string stringData, Encoding encoding, string path, byte[] key, byte[] iv)
+        public bool SaveEncryptedData<T>(T source, Encoding encoding, string path, byte[] key, byte[] iv)
         {
             try
             {
-                using (RijndaelManaged AES = new RijndaelManaged())
+                string stringData = _jsonHandler.Serialize(source);
+                byte[] data = Convert.FromBase64String(stringData);
+                using (FileStream fileStream = File.OpenWrite(path))
                 {
-                    byte[] data = Encoding.UTF8.GetBytes(stringData);
-                    using (MemoryStream memoryStream = new MemoryStream(data))
-                    {
-                        ICryptoTransform cryptoTransform = AES.CreateEncryptor(key, iv);
-                        using (CryptoStream cryptStream = new CryptoStream(memoryStream, cryptoTransform, CryptoStreamMode.Read))
-                        {
-                            using (FileStream fileStream = File.OpenWrite(path))
-                            {
-                                fileStream.SetLength(0);
-                                cryptStream.CopyTo(fileStream);
-                            }
-                        }
-                    }
+                    fileStream.SetLength(0);
+                    _cryptoHandler.EncryptStream(data, key, iv, fileStream);
                 }
                 return true;
             }
-            catch (Exception E)
+            catch
             {
-                LogError(E.ToString());
-                return false;
+                throw;
             }
         }
 
-        private void LogError(string message)
+        public bool SaveEncryptedStringData(string stringData, Encoding encoding, string path, byte[] key, byte[] iv)
         {
-            LogErrorListener?.Invoke(message);
+            try
+            {
+                byte[] data = Encoding.UTF8.GetBytes(stringData);
+                using (FileStream fileStream = File.OpenWrite(path))
+                {
+                    fileStream.SetLength(0);
+                    _cryptoHandler.EncryptStream(data, key, iv, fileStream);
+                }
+                return true;
+            }
+            catch
+            {
+                throw;
+            }
+        }
+
+        private bool IsSameBytes(byte[] T1, byte[] T2)
+        {
+            int length = T1.Length;
+            if (T2.Length != length)
+                return false;
+            ParallelLoopResult result = Parallel.For(0, length, (index, state) =>
+            {
+                if (T1[index] != T2[index])
+                    state.Break();
+            });
+            return !result.LowestBreakIteration.HasValue;
         }
     }
 }
