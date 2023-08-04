@@ -72,6 +72,8 @@ namespace GameWarriors.StorageDomain.Core
             if (string.IsNullOrEmpty(path))
                 return null;
 
+            if (!File.Exists(path)) return null;
+
             using (StreamReader reader = new StreamReader(path))
             {
                 return reader.ReadToEnd();
@@ -375,6 +377,8 @@ namespace GameWarriors.StorageDomain.Core
 
         public async Task<(bool, T)> LoadEncryptedDataAsync<T>(Encoding encoding, string path, byte[] key, byte[] iv)
         {
+            if (!File.Exists(path))
+                return (false, default);
             try
             {
                 byte[] data = null;
@@ -395,6 +399,8 @@ namespace GameWarriors.StorageDomain.Core
 
         public (bool, T) LoadEncryptedData<T>(Encoding encoding, string path, byte[] key, byte[] iv)
         {
+            if (!File.Exists(path))
+                return (false, default);
             try
             {
                 byte[] data = null;
@@ -447,7 +453,7 @@ namespace GameWarriors.StorageDomain.Core
             try
             {
                 string stringData = _jsonHandler.Serialize(source);
-                byte[] data = Convert.FromBase64String(stringData);
+                byte[] data = Encoding.UTF8.GetBytes(stringData);
                 using (FileStream fileStream = File.OpenWrite(path))
                 {
                     fileStream.SetLength(0);

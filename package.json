@@ -1,6 +1,6 @@
 {
   "name": "com.gamewarriors.storagesystem",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "displayName": "Storage System",
   "description": "This package provide ORM system that provide presist object saving. this package not use reflection library",
   "unity": "2019.1",
