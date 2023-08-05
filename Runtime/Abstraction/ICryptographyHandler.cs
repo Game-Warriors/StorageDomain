@@ -12,5 +12,6 @@ namespace GameWarriors.StorageDomain.Abstraction
         Task<byte[]> DecryptDataAsync(Stream stream, byte[] key, byte[] iv);
         void EncryptStream(byte[] inputData, byte[] key, byte[] iv, Stream outputStream);
         byte[] HashInput(string input, byte[] key);
+        string HashInputString(string dataString, byte[] hashKey);
     }
 }

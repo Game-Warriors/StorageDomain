@@ -1,3 +1,6 @@
+  version : 0.1.7
+  adding new classes to handle storage system and persist storage by unity PlayPrefs.
+
   version : 0.1.6
   adding existing file check on new loading and ignore exception throwing 
 
