@@ -57,6 +57,7 @@ namespace GameWarriors.StorageDomain.Data
         {
             _items = new T[10];
             _itemCounter = 0;
+            IsChanged = true;
         }
 
         public void SetFileName(string fileName)
@@ -66,6 +67,9 @@ namespace GameWarriors.StorageDomain.Data
 
         public void UpdateItem(T item, bool isAdd = true)
         {
+            if (_items == null)
+                Initialization();
+
             if (_itemCounter >= _items.Length)
             {
                 Array.Resize(ref _items, _itemCounter + 10);
@@ -158,12 +162,14 @@ namespace GameWarriors.StorageDomain.Data
 
         public void ClearData()
         {
-            foreach (T item in _items)
+            if (_items != null)
             {
-                OnItemDelete?.Invoke(DataType, item);
+                foreach (T item in _items)
+                {
+                    OnItemDelete?.Invoke(DataType, item);
+                }
+                SetAsChange();
             }
-
-            SetAsChange();
         }
     }
 #endif

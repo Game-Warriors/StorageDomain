@@ -8,13 +8,13 @@ namespace GameWarriors.StorageDomain.Tests
     {
         internal const string FILE_NAME = "fake3.bin";
         [SerializeField]
-        private string _name;
+        private string _userId;
         [SerializeField]
-        private int _value;
+        private string _forceVersion;
         [SerializeField]
-        private float _distance;
+        private string _newVersion;
         [SerializeField]
-        private double _maxDistance;
+        private bool _newFlag;
 
         public bool IsEncrypt => false;
 
@@ -34,10 +34,10 @@ namespace GameWarriors.StorageDomain.Tests
 
         public void Initialization()
         {
-            _name = "mahdi";
-            _value = 10;
-            _maxDistance = 1015.13135151d;
-            _distance = 99.9f;
+            _userId = Guid.NewGuid().ToString();
+            _forceVersion = Application.version;
+            _newVersion = Application.version;
+            _newFlag = true;
 
         }
 

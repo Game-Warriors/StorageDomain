@@ -1,5 +1,6 @@
 using GameWarriors.StorageDomain.Abstraction;
 using System;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -50,9 +51,31 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-        public (bool, T) LoadEncryptedData<T>(Encoding encoding, string path, byte[] key, byte[] iv)
+        public (bool, T) LoadEncryptedData<T>(Encoding encoding, string keyName, byte[] key, byte[] iv)
         {
-            throw new NotSupportedException();
+            string dataString = PlayerPrefs.GetString(keyName);
+            try
+            {
+                if (!string.IsNullOrEmpty(dataString))
+                {
+                    byte[] outputData = null;
+                    byte[] inputData = encoding.GetBytes(dataString);
+                    using (MemoryStream memoryStream = new MemoryStream(inputData))
+                    {
+                        outputData = _cryptoHandler.DecryptData(memoryStream, key, iv);
+                    }
+                    if (outputData == null)
+                        return (false, default);
+                    string stringData = encoding.GetString(outputData);
+                    T result = _jsonHandler.Deserialize<T>(stringData);
+                    return (true, result);
+                }
+                return (false, default);
+            }
+            catch
+            {
+                throw;
+            }
         }
 
         public bool SaveData<T>(T data, string key, byte[] hashKey)
@@ -75,9 +98,28 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-        public bool SaveEncryptedData<T>(T wordSource, Encoding encoding, string path, byte[] key, byte[] iv)
+        public bool SaveEncryptedData<T>(T source, Encoding encoding, string keyName, byte[] key, byte[] iv)
         {
-            throw new NotSupportedException();
+            try
+            {
+                string stringData = _jsonHandler.Serialize(source);
+                byte[] data = encoding.GetBytes(stringData);
+                string outputString = string.Empty;
+                using (MemoryStream memoryStream = new MemoryStream())
+                {
+                    _cryptoHandler.EncryptStream(data, key, iv, memoryStream);
+                    outputString = encoding.GetString(memoryStream.GetBuffer());
+                }
+                if (string.IsNullOrEmpty(outputString))
+                    return false;
+                PlayerPrefs.SetString(keyName, outputString);
+                PlayerPrefs.Save();
+                return true;
+            }
+            catch
+            {
+                throw;
+            }
         }
 
         public Task<(bool, T)> LoadDataAsync<T>(string path) => throw new NotSupportedException();

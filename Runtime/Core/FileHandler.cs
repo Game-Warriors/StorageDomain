@@ -453,7 +453,7 @@ namespace GameWarriors.StorageDomain.Core
             try
             {
                 string stringData = _jsonHandler.Serialize(source);
-                byte[] data = Encoding.UTF8.GetBytes(stringData);
+                byte[] data = encoding.GetBytes(stringData);
                 using (FileStream fileStream = File.OpenWrite(path))
                 {
                     fileStream.SetLength(0);
@@ -471,7 +471,7 @@ namespace GameWarriors.StorageDomain.Core
         {
             try
             {
-                byte[] data = Encoding.UTF8.GetBytes(stringData);
+                byte[] data = encoding.GetBytes(stringData);
                 using (FileStream fileStream = File.OpenWrite(path))
                 {
                     fileStream.SetLength(0);

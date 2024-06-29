@@ -48,7 +48,6 @@ namespace GameWarriors.StorageDomain.Core
             }
         }
 
-
         public byte[] HashInput(string input, byte[] key)
         {
             byte[] tmp = Encoding.Unicode.GetBytes(input);

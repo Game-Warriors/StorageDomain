@@ -35,7 +35,37 @@ namespace GameWarriors.StorageDomain.Core
 
         void IStorage.LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt, Action<U> onLoad)
         {
-            throw new NotSupportedException();
+            if (onLoad == null)
+                throw new ArgumentNullException($"The onLoad call back is null for dataName {dataName}");
+
+            if (string.IsNullOrEmpty(dataName))
+                throw new ArgumentNullException($"The null or empty value input for dataName of type:{typeof(U)}");
+
+            string path = FILE_ROOT + dataName;
+            if (_itemsTable.TryGetValue(dataName, out var item))
+            {
+                onLoad((U)item);
+            }
+            else
+            {
+                (bool state, U model) = isEncrypt
+                    ? ((bool state, U model))_persistStorage.LoadEncryptedData<U>(Encoding.UTF8, path, _storageConfig.Key, _storageConfig.IV)
+                    : ((bool state, U model))_persistStorage.LoadData<U>(path, _storageConfig.Key);
+                if (state)
+                {
+                    _itemsTable.Add(dataName, model);
+                    _storageItemList.Add(model);
+                    onLoad(model);
+                }
+                else
+                {
+                    U newFile = new();
+                    _itemsTable.Add(dataName, newFile);
+                    _storageItemList.Add(newFile);
+                    newFile.Initialization();
+                    onLoad(newFile);
+                }
+            }
         }
 
         Task<U> IStorage.LoadingDefaultModelAsync<T, U>(string dataName, bool isEncrypt)
@@ -160,9 +190,13 @@ namespace GameWarriors.StorageDomain.Core
                 catch (Exception E)
                 {
                     LogError(E.ToString());
+                    throw;
                 }
-                if (isResetTime)
-                    _timeTmp = 0;
+                finally
+                {
+                    if (isResetTime)
+                        _timeTmp = 0;
+                }
             }
         }
 
@@ -192,6 +226,7 @@ namespace GameWarriors.StorageDomain.Core
             catch (Exception E)
             {
                 LogError(E.ToString());
+                throw;
             }
         }
 
